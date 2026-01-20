@@ -147,6 +147,24 @@ class ChatService:
             "updated_at": session.updated_at,
         }
 
+    def list_sessions(self) -> List[Dict[str, object]]:
+        """Return lightweight session metadata for UI selection."""
+        payload = []
+        for session in self.sessions.values():
+            last_message = session.messages[-1]["content"] if session.messages else ""
+            payload.append(
+                {
+                    "session_id": session.session_id,
+                    "updated_at": session.updated_at,
+                    "summary": session.summary,
+                    "last_message": last_message,
+                    "vector_store_dir": session.vector_store_dir,
+                    "message_count": len(session.messages),
+                    "intents": session.intents[-3:],
+                }
+            )
+        return sorted(payload, key=lambda item: item.get("updated_at", 0), reverse=True)
+
     def _create_session(self, session_id: str) -> ChatSessionState:
         session = ChatSessionState(session_id=session_id)
         self.sessions[session_id] = session

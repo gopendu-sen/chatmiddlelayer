@@ -1,0 +1,43 @@
+:root {
+  --td-green-900: #0b3d2e;
+  --td-green-800: #0f5f47;
+  --td-green-700: #0b8a54;
+  --td-green-500: #15c26b;
+  --td-amber: #ffb347;
+  --td-cream: #f8f3eb;
+  --td-slate-900: #0d1d1b;
+  --td-slate-700: #33413f;
+  --td-slate-100: #e8eeed;
+  --td-border: #1f433b;
+  --radius-lg: 18px;
+  --radius-md: 12px;
+  --shadow-soft: 0 20px 50px rgba(4, 27, 19, 0.35);
+  --shadow-card: 0 12px 30px rgba(9, 34, 25, 0.25);
+  --font-body: "Space Grotesk", "Helvetica Neue", Arial, sans-serif;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-body);
+  background: radial-gradient(120% 120% at 20% 20%, rgba(21, 194, 107, 0.08), transparent),
+    radial-gradient(100% 100% at 80% 10%, rgba(255, 179, 71, 0.08), transparent),
+    linear-gradient(140deg, #0a1d19 0%, #0e2f28 40%, #0b3d2e 100%);
+  color: #f7fbf6;
+  min-height: 100vh;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+:focus-visible {
+  outline: 2px solid var(--td-amber);
+  outline-offset: 3px;
+}

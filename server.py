@@ -5,9 +5,11 @@ from __future__ import annotations
 import argparse
 import logging
 import os
-from typing import Any, Dict, Optional
+import shutil
+import time
+from typing import Any, Dict, List, Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field, validator
@@ -143,6 +145,11 @@ def create_app(log_dir: str = "./logs", chat_config: Optional[ChatConfig] = None
     async def health() -> Dict[str, str]:
         return {"status": "ok"}
 
+    @app.get("/chat/sessions")
+    async def list_sessions() -> Dict[str, list[dict]]:
+        """Expose the in-memory chat sessions for UI clients."""
+        return {"sessions": chat_service.list_sessions()}
+
     @app.post("/vector-store/build")
     async def build_vector_store(request: BuildVectorStoreRequest) -> Dict[str, str]:
         logger.info(
@@ -187,6 +194,66 @@ def create_app(log_dir: str = "./logs", chat_config: Optional[ChatConfig] = None
             raise HTTPException(status_code=500, detail="Vector store query failed") from exc
 
         return payload
+
+    @app.post("/vector-store/build/upload")
+    async def build_vector_store_with_upload(
+        vector_store_path: str = Form(..., description="Base directory for the vector store."),
+        vector_store_name: str = Form(..., description="Folder name for the created store."),
+        session_id: Optional[str] = Form(None, description="Optional session id for traceability."),
+        embedding_endpoint: str = Form(
+            "http://localhost:8001/v1/embeddings",
+            description="Embedding service endpoint.",
+        ),
+        embedding_batch_size: int = Form(32, description="Batch size for embedding calls."),
+        files: List[UploadFile] = File(..., description="Files to index into the vector store."),
+    ) -> Dict[str, Any]:
+        """Allow UI clients to upload files directly to create a vector store."""
+        if not files:
+            raise HTTPException(status_code=400, detail="At least one file must be uploaded.")
+
+        if not vector_store_path or not vector_store_path.strip():
+            raise HTTPException(status_code=400, detail="vector_store_path is required")
+        if not vector_store_name or not vector_store_name.strip():
+            raise HTTPException(status_code=400, detail="vector_store_name is required")
+
+        upload_root = os.path.join(vector_store_path, "_uploads")
+        os.makedirs(upload_root, exist_ok=True)
+        upload_dir = os.path.join(upload_root, f"{vector_store_name}_{int(time.time())}")
+        os.makedirs(upload_dir, exist_ok=True)
+
+        saved_files: list[str] = []
+        try:
+            for upload in files:
+                if not upload.filename:
+                    continue
+                target_path = os.path.join(upload_dir, upload.filename)
+                with open(target_path, "wb") as out_file:
+                    shutil.copyfileobj(upload.file, out_file)
+                upload.file.close()
+                saved_files.append(target_path)
+
+            config = AppConfig(
+                vector_store_path=vector_store_path,
+                vector_store_name=vector_store_name,
+                session_id=session_id,
+                files_location=upload_dir,
+                embedding_config=EmbeddingConfig(endpoint=embedding_endpoint, batch_size=embedding_batch_size),
+            )
+            store_name = await run_in_threadpool(run_pipeline, config)
+            full_path = os.path.join(vector_store_path, store_name)
+            logger.info(
+                "Vector store build (upload) complete: %s (session_id=%s)",
+                full_path,
+                session_id,
+            )
+            return {
+                "store_name": store_name,
+                "path": full_path,
+                "uploaded_files": saved_files,
+            }
+        except Exception as exc:
+            logger.exception("Vector store upload build failed (session_id=%s)", session_id)
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
 
     @app.post("/chat")
     async def chat(request: ChatRequest):
